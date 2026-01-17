@@ -1,0 +1,24 @@
+[project]
+name = "zotero-cli"
+version = "0.1.0"
+description = "Python CLI toolkit for Zotero's local API"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.28.0",
+    "bibtexparser>=1.4.0",
+]
+
+[project.optional-dependencies]
+convert = ["markitdown"]  # For PDF/EPUB to markdown conversion
+
+[project.scripts]
+zotero-get-annots = "zotero_cli.api:main"
+zotero-collection-annots = "zotero_cli.collection_annots:main"
+zotero-export-attachments = "zotero_cli.export_attachments:main"
+zotero-list-libraries = "zotero_cli.list_libraries:main"
+zotero-find-items = "zotero_cli.find_items:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

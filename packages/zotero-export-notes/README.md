@@ -1,0 +1,4 @@
+This extension exports annotations from current PDF (or current item's PDF attachment) as a .org file. Each annotation is reproduced as a `quote` block with an [org-pdftools](https://github.com/fuxialexander/org-pdftools) style pdf link to the correct page of the file's local location in the Zotero database.  
+
+The final implementation should include tests, build instructions, installation and usage instructions, as well as the main code.  
+

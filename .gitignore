@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+*.tsbuildinfo
+.scaffold/
+*.xpi
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Test output
+test_output*/
+*.test.json
+collections-list.json
+
+# Lock files (each package manages its own)
+# Keep package-lock.json and uv.lock in packages
+
+# Claude Code settings
+.claude/
+
+# Emacs
+\#*\#
+.\#*
+*~undo-tree~

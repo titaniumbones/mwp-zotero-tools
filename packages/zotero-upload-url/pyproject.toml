@@ -1,0 +1,14 @@
+[project]
+name = "zotero-upload-url"
+version = "0.1.0"
+description = "Save URLs to Zotero via Firefox and Zotero Connector"
+requires-python = ">=3.9"
+dependencies = ["requests>=2.28.0"]
+
+[project.scripts]
+zotero-save = "zotero_upload_url.saver:main"
+zotero-collection = "zotero_upload_url.collection:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

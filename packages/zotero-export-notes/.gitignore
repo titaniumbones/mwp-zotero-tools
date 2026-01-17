@@ -1,0 +1,20 @@
+# dot files
+.DS_Store
+*~undo-tree~
+
+# Node.js
+node_modules
+pnpm-lock.yaml
+yarn.lock
+
+# TSC
+tsconfig.tsbuildinfo
+
+# Scaffold
+.env
+.scaffold
+build
+logs
+
+# Test output
+collections-list.json
