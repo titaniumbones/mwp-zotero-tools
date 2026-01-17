@@ -143,3 +143,65 @@ uv run zotero-collection
 # Then save URL
 uv run zotero-save "https://example.com/article"
 ```
+
+---
+
+## Project History & Design Decisions
+
+### Consolidation (January 2026)
+
+This monorepo was created by consolidating three separate repositories:
+
+1. **titaniumbones/zotero-export-notes** (archived)
+   - Zotero 7 plugin with HTTP API
+   - Now at `packages/zotero-export-notes/`
+
+2. **titaniumbones/zotero-cli** (archived)
+   - Python scripts + Emacs Lisp
+   - Python now at `packages/zotero-cli/`
+   - Elisp now at `packages/zotero-elisp/`
+
+3. **titaniumbones/zotero-upload-url** (archived)
+   - URL saving tool
+   - Now at `packages/zotero-upload-url/`
+
+### Key Design Decisions
+
+**API Strategy: Prefer Native Zotero API**
+- Collection listing (`zotero-collection --list`) uses native `/api/users/0/collections`
+- This works without the plugin installed
+- Plugin API only used for operations requiring UI manipulation:
+  - `collection/select` (changes Zotero's UI selection)
+  - `collection/create` (creates via Zotero's transaction system)
+  - `collection/current` (reads UI state)
+  - `picker` (gets current UI selection)
+
+**Citekey Resolution**
+- Plugin uses Better BibTeX JSON-RPC for real-time citekey lookup
+- Python CLI uses exported BibTeX file parsing (offline/batch scenarios)
+- Both approaches have valid use cases
+
+**Emacs Lisp as First-Class**
+- Elisp implementation maintains API parity with Python where possible
+- Separate package (`zotero-elisp`) for clean Emacs integration
+- Tests in `packages/zotero-elisp/test/`
+
+### Future Considerations
+
+1. **Shared Python API module**: The `ZoteroLocalAPI` class in `zotero-cli` could be extracted to a shared package that `zotero-upload-url` imports, avoiding code duplication.
+
+2. **Package dependencies**: Currently independent packages. Could add:
+   ```toml
+   # packages/zotero-upload-url/pyproject.toml
+   dependencies = ["zotero-cli"]  # For shared ZoteroLocalAPI
+   ```
+
+3. **Workspace configuration**: Could add root `pyproject.toml` with uv workspace config if packages need to share code.
+
+### Detailed Comparison
+
+See [packages/zotero-export-notes/docs/comparison.md](./packages/zotero-export-notes/docs/comparison.md) for:
+- Complete API endpoint comparison
+- Overlapping vs unique functionality matrix
+- Data flow diagrams
+- When to use which tool
