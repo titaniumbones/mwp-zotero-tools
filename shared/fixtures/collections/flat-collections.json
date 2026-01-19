@@ -1,0 +1,62 @@
+[
+  {
+    "key": "FLAT0001",
+    "version": 1,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 0,
+      "numItems": 10
+    },
+    "data": {
+      "key": "FLAT0001",
+      "version": 1,
+      "name": "To Read",
+      "parentCollection": false,
+      "relations": {}
+    }
+  },
+  {
+    "key": "FLAT0002",
+    "version": 2,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 0,
+      "numItems": 25
+    },
+    "data": {
+      "key": "FLAT0002",
+      "version": 2,
+      "name": "Favorites",
+      "parentCollection": false,
+      "relations": {}
+    }
+  },
+  {
+    "key": "FLAT0003",
+    "version": 3,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 0,
+      "numItems": 5
+    },
+    "data": {
+      "key": "FLAT0003",
+      "version": 3,
+      "name": "Archive",
+      "parentCollection": false,
+      "relations": {}
+    }
+  }
+]

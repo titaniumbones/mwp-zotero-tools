@@ -1,0 +1,60 @@
+{
+  "key": "BOOK1234",
+  "version": 5678,
+  "library": {
+    "type": "user",
+    "id": 12345,
+    "name": "My Library",
+    "links": {
+      "alternate": {
+        "href": "https://www.zotero.org/user/12345",
+        "type": "text/html"
+      }
+    }
+  },
+  "links": {
+    "self": {
+      "href": "https://api.zotero.org/users/12345/items/BOOK1234",
+      "type": "application/json"
+    },
+    "alternate": {
+      "href": "https://www.zotero.org/user/12345/items/BOOK1234",
+      "type": "text/html"
+    }
+  },
+  "meta": {
+    "creatorSummary": "Thompson",
+    "parsedDate": "2022",
+    "numChildren": 1
+  },
+  "data": {
+    "key": "BOOK1234",
+    "version": 5678,
+    "itemType": "book",
+    "title": "Deep Learning: Foundations and Applications",
+    "creators": [
+      {
+        "creatorType": "author",
+        "firstName": "Emily",
+        "lastName": "Thompson"
+      }
+    ],
+    "abstractNote": "A comprehensive textbook covering the foundations of deep learning, including neural network architectures, optimization techniques, and practical applications.",
+    "publisher": "Academic Press",
+    "place": "New York",
+    "edition": "2nd",
+    "numPages": "542",
+    "ISBN": "978-0-12-345678-9",
+    "date": "2022",
+    "language": "en",
+    "tags": [
+      {"tag": "deep learning"},
+      {"tag": "textbook"},
+      {"tag": "neural networks"}
+    ],
+    "collections": ["COL00001", "COL00002"],
+    "relations": {},
+    "dateAdded": "2023-01-15T08:00:00Z",
+    "dateModified": "2023-01-20T12:30:00Z"
+  }
+}

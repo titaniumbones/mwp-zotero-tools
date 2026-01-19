@@ -1,0 +1,125 @@
+{
+  "user_library": {
+    "type": "user",
+    "id": 12345,
+    "name": "My Library",
+    "links": {
+      "alternate": {
+        "href": "https://www.zotero.org/user/12345",
+        "type": "text/html"
+      }
+    }
+  },
+  "groups": [
+    {
+      "id": 98765,
+      "version": 50,
+      "links": {
+        "self": {
+          "href": "https://api.zotero.org/groups/98765",
+          "type": "application/json"
+        },
+        "alternate": {
+          "href": "https://www.zotero.org/groups/98765",
+          "type": "text/html"
+        }
+      },
+      "meta": {
+        "created": "2022-01-15T10:00:00Z",
+        "lastModified": "2024-01-10T15:30:00Z",
+        "numItems": 245
+      },
+      "data": {
+        "id": 98765,
+        "version": 50,
+        "name": "AI Research Lab",
+        "owner": 11111,
+        "type": "PublicClosed",
+        "description": "Shared library for the AI Research Lab team",
+        "url": "",
+        "libraryEditing": "admins",
+        "libraryReading": "members",
+        "fileEditing": "admins",
+        "admins": [11111, 22222],
+        "members": [33333, 44444, 55555]
+      }
+    },
+    {
+      "id": 87654,
+      "version": 30,
+      "links": {
+        "self": {
+          "href": "https://api.zotero.org/groups/87654",
+          "type": "application/json"
+        },
+        "alternate": {
+          "href": "https://www.zotero.org/groups/87654",
+          "type": "text/html"
+        }
+      },
+      "meta": {
+        "created": "2023-06-01T08:00:00Z",
+        "lastModified": "2024-01-08T12:00:00Z",
+        "numItems": 89
+      },
+      "data": {
+        "id": 87654,
+        "version": 30,
+        "name": "Book Club - Science Fiction",
+        "owner": 12345,
+        "type": "Private",
+        "description": "Reading materials for the monthly sci-fi book club",
+        "url": "",
+        "libraryEditing": "members",
+        "libraryReading": "members",
+        "fileEditing": "members",
+        "admins": [12345],
+        "members": [66666, 77777]
+      }
+    }
+  ],
+  "group_collections": {
+    "98765": [
+      {
+        "key": "GRPCOL01",
+        "version": 5,
+        "library": {
+          "type": "group",
+          "id": 98765,
+          "name": "AI Research Lab"
+        },
+        "meta": {
+          "numCollections": 1,
+          "numItems": 50
+        },
+        "data": {
+          "key": "GRPCOL01",
+          "version": 5,
+          "name": "Published Papers",
+          "parentCollection": false,
+          "relations": {}
+        }
+      },
+      {
+        "key": "GRPCOL02",
+        "version": 6,
+        "library": {
+          "type": "group",
+          "id": 98765,
+          "name": "AI Research Lab"
+        },
+        "meta": {
+          "numCollections": 0,
+          "numItems": 25
+        },
+        "data": {
+          "key": "GRPCOL02",
+          "version": 6,
+          "name": "2024 Papers",
+          "parentCollection": "GRPCOL01",
+          "relations": {}
+        }
+      }
+    ]
+  }
+}

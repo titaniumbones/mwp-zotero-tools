@@ -27,6 +27,7 @@
     "lint:fix": "prettier --write . && eslint . --fix",
     "release": "zotero-plugin release",
     "test": "zotero-plugin test",
+    "test:unit": "NODE_OPTIONS='--import tsx' mocha 'test/unit/**/*.test.ts'",
     "update-deps": "npm update --save"
   },
   "dependencies": {
@@ -36,6 +37,8 @@
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.10.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.0",
     "@zotero-plugin/eslint-config": "^0.6.7",
     "chai": "^6.2.1",
     "eslint": "^9.39.2",

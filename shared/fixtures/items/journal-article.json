@@ -1,0 +1,73 @@
+{
+  "key": "ABC12345",
+  "version": 1234,
+  "library": {
+    "type": "user",
+    "id": 12345,
+    "name": "My Library",
+    "links": {
+      "alternate": {
+        "href": "https://www.zotero.org/user/12345",
+        "type": "text/html"
+      }
+    }
+  },
+  "links": {
+    "self": {
+      "href": "https://api.zotero.org/users/12345/items/ABC12345",
+      "type": "application/json"
+    },
+    "alternate": {
+      "href": "https://www.zotero.org/user/12345/items/ABC12345",
+      "type": "text/html"
+    }
+  },
+  "meta": {
+    "creatorSummary": "Smith et al.",
+    "parsedDate": "2023",
+    "numChildren": 2
+  },
+  "data": {
+    "key": "ABC12345",
+    "version": 1234,
+    "itemType": "journalArticle",
+    "title": "A Comprehensive Study of Machine Learning Applications",
+    "creators": [
+      {
+        "creatorType": "author",
+        "firstName": "John",
+        "lastName": "Smith"
+      },
+      {
+        "creatorType": "author",
+        "firstName": "Jane",
+        "lastName": "Doe"
+      },
+      {
+        "creatorType": "author",
+        "firstName": "Robert",
+        "lastName": "Johnson"
+      }
+    ],
+    "abstractNote": "This paper presents a comprehensive review of machine learning applications in various domains, including healthcare, finance, and natural language processing. We analyze recent advances and identify key challenges for future research.",
+    "publicationTitle": "Journal of Artificial Intelligence Research",
+    "volume": "45",
+    "issue": "3",
+    "pages": "123-156",
+    "date": "2023-06-15",
+    "DOI": "10.1234/jair.2023.45.3.123",
+    "ISSN": "1076-9757",
+    "url": "https://www.jair.org/index.php/jair/article/view/12345",
+    "accessDate": "2023-07-01",
+    "language": "en",
+    "tags": [
+      {"tag": "machine learning"},
+      {"tag": "artificial intelligence"},
+      {"tag": "review"}
+    ],
+    "collections": ["COL00001"],
+    "relations": {},
+    "dateAdded": "2023-07-01T10:30:00Z",
+    "dateModified": "2023-07-15T14:22:00Z"
+  }
+}

@@ -3,7 +3,7 @@ name = "zotero-cli"
 version = "0.1.0"
 description = "Python CLI toolkit for Zotero's local API"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "requests>=2.28.0",
     "bibtexparser>=1.4.0",
@@ -11,6 +11,17 @@ dependencies = [
 
 [project.optional-dependencies]
 convert = ["markitdown"]  # For PDF/EPUB to markdown conversion
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "responses>=0.23.0",  # For mocking HTTP requests
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
 
 [project.scripts]
 zotero-get-annots = "zotero_cli.api:main"

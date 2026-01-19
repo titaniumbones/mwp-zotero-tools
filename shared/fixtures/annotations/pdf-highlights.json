@@ -1,0 +1,143 @@
+[
+  {
+    "key": "ANNOT001",
+    "version": 200,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "data": {
+      "key": "ANNOT001",
+      "version": 200,
+      "parentItem": "ATTACH01",
+      "itemType": "annotation",
+      "annotationType": "highlight",
+      "annotationText": "Machine learning has revolutionized the way we approach complex problems in various domains.",
+      "annotationComment": "This is a key insight about ML impact.",
+      "annotationColor": "#ffd400",
+      "annotationPageLabel": "5",
+      "annotationSortIndex": "00005|001234|00100",
+      "annotationPosition": "{\"pageIndex\":4,\"rects\":[[100,200,500,220]]}",
+      "tags": [
+        {"tag": "important"},
+        {"tag": "key-insight"}
+      ],
+      "relations": {},
+      "dateAdded": "2024-01-11T10:00:00Z",
+      "dateModified": "2024-01-11T10:00:00Z"
+    }
+  },
+  {
+    "key": "ANNOT002",
+    "version": 201,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "data": {
+      "key": "ANNOT002",
+      "version": 201,
+      "parentItem": "ATTACH01",
+      "itemType": "annotation",
+      "annotationType": "highlight",
+      "annotationText": "The transformer architecture, introduced by Vaswani et al. (2017), has become the foundation for most state-of-the-art NLP models.",
+      "annotationComment": "",
+      "annotationColor": "#5fb236",
+      "annotationPageLabel": "12",
+      "annotationSortIndex": "00012|002345|00200",
+      "annotationPosition": "{\"pageIndex\":11,\"rects\":[[50,300,550,340]]}",
+      "tags": [
+        {"tag": "transformer"}
+      ],
+      "relations": {},
+      "dateAdded": "2024-01-11T10:15:00Z",
+      "dateModified": "2024-01-11T10:15:00Z"
+    }
+  },
+  {
+    "key": "ANNOT003",
+    "version": 202,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "data": {
+      "key": "ANNOT003",
+      "version": 202,
+      "parentItem": "ATTACH01",
+      "itemType": "annotation",
+      "annotationType": "note",
+      "annotationText": "",
+      "annotationComment": "Need to follow up on the attention mechanism details. See section 3.2 for mathematical formulation.",
+      "annotationColor": "#2ea8e5",
+      "annotationPageLabel": "15",
+      "annotationSortIndex": "00015|003000|00050",
+      "annotationPosition": "{\"pageIndex\":14,\"rects\":[[200,400,220,420]]}",
+      "tags": [
+        {"tag": "follow-up"}
+      ],
+      "relations": {},
+      "dateAdded": "2024-01-11T10:30:00Z",
+      "dateModified": "2024-01-11T10:30:00Z"
+    }
+  },
+  {
+    "key": "ANNOT004",
+    "version": 203,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "data": {
+      "key": "ANNOT004",
+      "version": 203,
+      "parentItem": "ATTACH01",
+      "itemType": "annotation",
+      "annotationType": "underline",
+      "annotationText": "Pre-training on large corpora followed by fine-tuning has proven highly effective.",
+      "annotationComment": "Transfer learning approach",
+      "annotationColor": "#a28ae5",
+      "annotationPageLabel": "20",
+      "annotationSortIndex": "00020|004000|00150",
+      "annotationPosition": "{\"pageIndex\":19,\"rects\":[[100,150,500,170]]}",
+      "tags": [],
+      "relations": {},
+      "dateAdded": "2024-01-11T11:00:00Z",
+      "dateModified": "2024-01-11T11:00:00Z"
+    }
+  },
+  {
+    "key": "ANNOT005",
+    "version": 204,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "data": {
+      "key": "ANNOT005",
+      "version": 204,
+      "parentItem": "ATTACH01",
+      "itemType": "annotation",
+      "annotationType": "image",
+      "annotationText": "",
+      "annotationComment": "Figure 3: Architecture diagram of the transformer model",
+      "annotationColor": "#ff6666",
+      "annotationPageLabel": "8",
+      "annotationSortIndex": "00008|001800|00300",
+      "annotationPosition": "{\"pageIndex\":7,\"rects\":[[50,100,550,400]]}",
+      "annotationImagePath": "annotation/ANNOT005.png",
+      "tags": [
+        {"tag": "figure"},
+        {"tag": "architecture"}
+      ],
+      "relations": {},
+      "dateAdded": "2024-01-11T11:30:00Z",
+      "dateModified": "2024-01-11T11:30:00Z"
+    }
+  }
+]

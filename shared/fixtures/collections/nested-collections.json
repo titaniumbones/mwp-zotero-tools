@@ -1,0 +1,102 @@
+[
+  {
+    "key": "COL00001",
+    "version": 10,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 2,
+      "numItems": 15
+    },
+    "data": {
+      "key": "COL00001",
+      "version": 10,
+      "name": "Research",
+      "parentCollection": false,
+      "relations": {}
+    }
+  },
+  {
+    "key": "COL00002",
+    "version": 11,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 0,
+      "numItems": 8
+    },
+    "data": {
+      "key": "COL00002",
+      "version": 11,
+      "name": "Machine Learning",
+      "parentCollection": "COL00001",
+      "relations": {}
+    }
+  },
+  {
+    "key": "COL00003",
+    "version": 12,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 1,
+      "numItems": 5
+    },
+    "data": {
+      "key": "COL00003",
+      "version": 12,
+      "name": "Natural Language Processing",
+      "parentCollection": "COL00001",
+      "relations": {}
+    }
+  },
+  {
+    "key": "COL00004",
+    "version": 13,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 0,
+      "numItems": 3
+    },
+    "data": {
+      "key": "COL00004",
+      "version": 13,
+      "name": "Transformers",
+      "parentCollection": "COL00003",
+      "relations": {}
+    }
+  },
+  {
+    "key": "COL00005",
+    "version": 14,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "numCollections": 0,
+      "numItems": 20
+    },
+    "data": {
+      "key": "COL00005",
+      "version": 14,
+      "name": "Teaching Materials",
+      "parentCollection": false,
+      "relations": {}
+    }
+  }
+]

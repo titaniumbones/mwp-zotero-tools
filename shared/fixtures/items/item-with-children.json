@@ -1,0 +1,110 @@
+{
+  "item": {
+    "key": "PARENT01",
+    "version": 100,
+    "library": {
+      "type": "user",
+      "id": 12345,
+      "name": "My Library"
+    },
+    "meta": {
+      "creatorSummary": "Garcia",
+      "parsedDate": "2024",
+      "numChildren": 3
+    },
+    "data": {
+      "key": "PARENT01",
+      "version": 100,
+      "itemType": "journalArticle",
+      "title": "Advances in Natural Language Processing",
+      "creators": [
+        {
+          "creatorType": "author",
+          "firstName": "Maria",
+          "lastName": "Garcia"
+        }
+      ],
+      "abstractNote": "This paper explores recent advances in NLP.",
+      "publicationTitle": "Computational Linguistics Journal",
+      "volume": "50",
+      "pages": "1-25",
+      "date": "2024",
+      "DOI": "10.5555/nlp.2024.001",
+      "tags": [{"tag": "NLP"}, {"tag": "transformers"}],
+      "collections": ["COL00001"],
+      "dateAdded": "2024-01-10T09:00:00Z",
+      "dateModified": "2024-01-15T11:00:00Z"
+    }
+  },
+  "children": [
+    {
+      "key": "ATTACH01",
+      "version": 101,
+      "library": {
+        "type": "user",
+        "id": 12345,
+        "name": "My Library"
+      },
+      "data": {
+        "key": "ATTACH01",
+        "version": 101,
+        "parentItem": "PARENT01",
+        "itemType": "attachment",
+        "linkMode": "imported_file",
+        "title": "Garcia - 2024 - Advances in Natural Language Processing.pdf",
+        "contentType": "application/pdf",
+        "charset": "",
+        "filename": "Garcia - 2024 - Advances in Natural Language Processing.pdf",
+        "md5": "abc123def456",
+        "mtime": 1704880000000,
+        "tags": [],
+        "relations": {},
+        "dateAdded": "2024-01-10T09:05:00Z",
+        "dateModified": "2024-01-10T09:05:00Z"
+      }
+    },
+    {
+      "key": "NOTE0001",
+      "version": 102,
+      "library": {
+        "type": "user",
+        "id": 12345,
+        "name": "My Library"
+      },
+      "data": {
+        "key": "NOTE0001",
+        "version": 102,
+        "parentItem": "PARENT01",
+        "itemType": "note",
+        "note": "<p>This is a standalone note about the article. Key insights: the paper argues that transformer architectures have revolutionized NLP tasks.</p>",
+        "tags": [{"tag": "important"}],
+        "relations": {},
+        "dateAdded": "2024-01-12T14:00:00Z",
+        "dateModified": "2024-01-12T14:30:00Z"
+      }
+    },
+    {
+      "key": "ATTACH02",
+      "version": 103,
+      "library": {
+        "type": "user",
+        "id": 12345,
+        "name": "My Library"
+      },
+      "data": {
+        "key": "ATTACH02",
+        "version": 103,
+        "parentItem": "PARENT01",
+        "itemType": "attachment",
+        "linkMode": "linked_url",
+        "title": "Supplementary Materials",
+        "url": "https://example.com/supplementary",
+        "contentType": "text/html",
+        "tags": [],
+        "relations": {},
+        "dateAdded": "2024-01-10T09:10:00Z",
+        "dateModified": "2024-01-10T09:10:00Z"
+      }
+    }
+  ]
+}
