@@ -21,6 +21,7 @@ addopts = "-v --tb=short"
 [project.scripts]
 zotero-save = "zotero_upload_url.saver:main"
 zotero-collection = "zotero_upload_url.collection:main"
+zotero-harvest = "zotero_upload_url.harvester:main"
 
 [build-system]
 requires = ["hatchling"]
