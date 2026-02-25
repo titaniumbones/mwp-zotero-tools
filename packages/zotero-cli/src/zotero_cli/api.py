@@ -365,7 +365,7 @@ class ZoteroLocalAPI:
         if not item:
             return {"error": f"Item {item_id} not found"}
 
-        pdf_attachments = self.get_pdf_attachments(item_id, library_id)
+        file_attachments = self.get_file_attachments(item_id, library_id)
 
         result = {
             "item_id": item_id,
@@ -374,7 +374,7 @@ class ZoteroLocalAPI:
             "attachments": []
         }
 
-        for attachment in pdf_attachments:
+        for attachment in file_attachments:
             attachment_id = attachment['key']
             attachment_title = attachment.get('data', {}).get('title', 'Unknown')
             annotations = self.get_attachment_annotations(attachment_id, library_id)
@@ -435,10 +435,22 @@ class ZoteroLocalAPI:
         return sorted(annotations, key=sort_key)
 
     def _get_page_label(self, ann_data: Dict[str, Any]) -> str:
-        """Extract page label string from annotation data, for chapter lookup."""
+        """Extract page label string from annotation data, for chapter lookup.
+
+        For PDF annotations, returns annotationPageLabel.
+        For EPUB annotations (empty page label), extracts the spine index
+        from annotationSortIndex (first field, e.g., "00055|001234" → "00055").
+        """
         page_label = ann_data.get('annotationPageLabel', '')
         if page_label:
             return page_label
+        # EPUB annotations: extract spine index from annotationSortIndex
+        sort_index = ann_data.get('annotationSortIndex', '')
+        if sort_index and '|' in sort_index:
+            spine_idx = sort_index.split('|')[0]
+            # Verify it looks like a zero-padded number
+            if spine_idx.isdigit():
+                return spine_idx
         # Fallback to pageIndex (0-indexed) converted to 1-indexed string
         position = ann_data.get('annotationPosition', {})
         if isinstance(position, str):
@@ -464,6 +476,11 @@ class ZoteroLocalAPI:
             link += "?" + "&".join(params)
         return link
 
+    @staticmethod
+    def _is_spine_index(label: str) -> bool:
+        """Check if a page label looks like an EPUB spine index (zero-padded digits, 5+ chars)."""
+        return bool(label) and label.isdigit() and len(label) >= 5
+
     def _format_single_annotation_org(self, annotation: Dict[str, Any], attachment_id: str,
                                        citation_key: Optional[str] = None,
                                        library_id: Optional[str] = None) -> List[str]:
@@ -475,11 +492,20 @@ class ZoteroLocalAPI:
         text = self.normalize_text_encoding(ann_data.get('annotationText', ''))
         comment = self.normalize_text_encoding(ann_data.get('annotationComment', ''))
         page_label = ann_data.get('annotationPageLabel', '')
+        sort_index = ann_data.get('annotationSortIndex', '')
         color = ann_data.get('annotationColor', '')
         tags = ann_data.get('tags', [])
 
-        # Page info for display
-        page_display = f"p. {page_label}" if page_label else "p. ?"
+        # Page info for display — omit for EPUB annotations (no meaningful page label)
+        if page_label and not self._is_spine_index(page_label):
+            page_display = f"p. {page_label}"
+        elif not page_label and '|' in sort_index:
+            # EPUB annotation: no page label but has sort index
+            page_display = "annotation"
+        elif not page_label:
+            page_display = "p. ?"
+        else:
+            page_display = "annotation"
 
         # Zotero open-pdf link
         zotero_link = self._build_zotero_open_link(attachment_id, page_label, ann_key, library_id)
@@ -522,26 +548,28 @@ class ZoteroLocalAPI:
         return lines
 
     def _get_chapter_map_for_attachment(self, attachment: Dict[str, Any]) -> list:
-        """Try to get a chapter map for a PDF attachment."""
-        from zotero_cli.pdf_toc import get_chapter_map_for_pdf
-        pdf_path = attachment.get('path', '')
-        if not pdf_path:
+        """Try to get a chapter map for a PDF or EPUB attachment."""
+        from zotero_cli.pdf_toc import get_chapter_map_for_epub, get_chapter_map_for_pdf
+        file_path = attachment.get('path', '')
+        if not file_path:
             return []
         # Resolve storage path if needed
         import os
-        if not os.path.isabs(pdf_path):
+        if not os.path.isabs(file_path):
             # Try Zotero storage path pattern
             att_id = attachment.get('attachment_id', '')
             zotero_dir = os.path.expanduser("~/Zotero/storage")
-            candidate = os.path.join(zotero_dir, att_id, pdf_path)
+            candidate = os.path.join(zotero_dir, att_id, file_path)
             if os.path.exists(candidate):
-                pdf_path = candidate
+                file_path = candidate
             else:
                 return []
-        if not os.path.exists(pdf_path):
+        if not os.path.exists(file_path):
             return []
         try:
-            return get_chapter_map_for_pdf(pdf_path)
+            if file_path.lower().endswith('.epub'):
+                return get_chapter_map_for_epub(file_path)
+            return get_chapter_map_for_pdf(file_path)
         except Exception:
             return []
 
@@ -585,11 +613,9 @@ class ZoteroLocalAPI:
             if multi_attachment:
                 org_content.append(f"** {attachment_title}")
                 org_content.append("")
-                ann_heading = "***"
-                chapter_heading_base = "***"
-            else:
-                ann_heading = "**"
                 chapter_heading_base = "**"
+            else:
+                chapter_heading_base = "*"
 
             if not annotations:
                 if multi_attachment:
@@ -598,9 +624,6 @@ class ZoteroLocalAPI:
                     org_content.append("No annotations found.")
                 org_content.append("")
                 continue
-
-            org_content.append(f"{ann_heading} Annotations")
-            org_content.append("")
 
             # Sort annotations by sort index
             sorted_anns = self._sort_annotations(annotations)
@@ -645,9 +668,18 @@ class ZoteroLocalAPI:
         text = self.normalize_text_encoding(ann_data.get('annotationText', ''))
         comment = self.normalize_text_encoding(ann_data.get('annotationComment', ''))
         page_label = ann_data.get('annotationPageLabel', '')
+        sort_index = ann_data.get('annotationSortIndex', '')
         tags = ann_data.get('tags', [])
 
-        page_display = f"p. {page_label}" if page_label else "p. ?"
+        # Page info for display — omit for EPUB annotations (no meaningful page label)
+        if page_label and not self._is_spine_index(page_label):
+            page_display = f"p. {page_label}"
+        elif not page_label and '|' in sort_index:
+            page_display = "annotation"
+        elif not page_label:
+            page_display = "p. ?"
+        else:
+            page_display = "annotation"
         zotero_link = self._build_zotero_open_link(attachment_id, page_label, ann_key)
 
         if ann_type in ('highlight', 'underline'):
@@ -726,15 +758,11 @@ class ZoteroLocalAPI:
                 md_content.append("")
                 continue
 
-            heading_prefix = "###" if multi_attachment else "##"
-            md_content.append(f"{heading_prefix} Annotations")
-            md_content.append("")
-
             sorted_anns = self._sort_annotations(annotations)
 
             chapter_map = self._get_chapter_map_for_attachment(attachment)
             current_chapters = {}  # level -> title
-            chapter_heading_base = "##" + ("#" if multi_attachment else "")
+            chapter_heading_base = "#" + ("#" if multi_attachment else "")
 
             for annotation in sorted_anns:
                 ann_data = annotation.get('data', {})

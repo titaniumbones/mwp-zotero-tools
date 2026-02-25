@@ -123,11 +123,7 @@ class BetterBibTexClient:
         }
 
         for attachment in attachments:
-            # Filter to PDF-only: skip non-PDF attachments (e.g., EPUB)
             att_path = attachment.get("path", "")
-            if att_path and not att_path.lower().endswith(".pdf"):
-                continue
-
             raw_annotations = attachment.get("annotations", [])
 
             # Extract attachment ID: try 'open' URL, then first annotation's parentItem
@@ -143,10 +139,12 @@ class BetterBibTexClient:
             for ann in raw_annotations:
                 normalized.append(_normalize_bbt_annotation(ann, attachment))
 
+            filename = os.path.basename(att_path)
+            att_title = attachment.get("title") or filename or "Unknown"
             att_data = {
                 "attachment_id": att_id,
-                "attachment_title": attachment.get("title", "Unknown"),
-                "filename": os.path.basename(att_path),
+                "attachment_title": att_title,
+                "filename": filename,
                 "path": att_path,
                 "annotations_count": len(normalized),
                 "annotations": normalized,

@@ -237,9 +237,10 @@ class TestFormatAsOrgMode:
         result = api.format_as_org_mode(data)
         assert "No annotations found." in result
 
-    def test_annotations_heading_present(self, api, single_highlight_data):
+    def test_no_annotations_heading(self, api, single_highlight_data):
+        """Annotations heading was removed for simpler structure."""
         result = api.format_as_org_mode(single_highlight_data)
-        assert "** Annotations" in result
+        assert "Annotations" not in result.split("\n")[0:10]
 
     def test_single_attachment_no_attachment_header(self, api, single_highlight_data):
         """With a single attachment, skip the attachment-level header."""
@@ -277,7 +278,6 @@ class TestFormatAsOrgMode:
         """Test with the shared conftest fixture."""
         result = api.format_as_org_mode(annotations_data)
         assert result.startswith("* ")
-        assert "** Annotations" in result
         assert "#+begin_quote" in result
 
 
@@ -346,14 +346,14 @@ class TestFormatAsMarkdown:
         assert "# Test Item" in result
         assert "**Zotero Key:** ABC123" in result
 
-    def test_annotations_heading(self, api, single_highlight_data):
+    def test_no_annotations_heading(self, api, single_highlight_data):
+        """Annotations heading was removed for simpler structure."""
         result = api.format_as_markdown(single_highlight_data)
-        assert "## Annotations" in result
+        assert "## Annotations" not in result
 
     def test_with_shared_fixture(self, api, annotations_data):
         result = api.format_as_markdown(annotations_data)
         assert result.startswith("# ")
-        assert "## Annotations" in result
 
 
 class TestFormatCollectionAnnotationsAsOrg:

@@ -9,8 +9,13 @@ Page numbers use the PDF's page labels (printed page numbers) rather
 than physical page indices, so they match annotationPageLabel values.
 """
 
+import os
+import re
+import xml.etree.ElementTree as ET
+import zipfile
 from bisect import bisect_right
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import unquote, urlparse
 
 
 def extract_toc(pdf_path: str) -> List[Tuple[int, str, int]]:
@@ -229,3 +234,194 @@ def get_chapter_map_for_pdf(pdf_path: str, max_level: int = 2) -> List[Tuple[str
         Sorted list of (title, page_label, level) tuples, or empty list.
     """
     return build_chapter_map_from_pdf(pdf_path, max_level)
+
+
+def _parse_epub_spine(zf: zipfile.ZipFile) -> List[str]:
+    """
+    Parse an EPUB's container.xml → OPF → spine to get ordered hrefs.
+
+    Returns a list of hrefs (relative to the OPF directory) in spine order.
+    """
+    # Find OPF path from container.xml
+    container = ET.fromstring(zf.read("META-INF/container.xml"))
+    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+    rootfile = container.find(".//c:rootfile", ns)
+    if rootfile is None:
+        return []
+    opf_path = rootfile.get("full-path", "")
+    if not opf_path:
+        return []
+
+    opf_dir = os.path.dirname(opf_path)
+
+    # Parse OPF
+    opf = ET.fromstring(zf.read(opf_path))
+    opf_ns = {"opf": "http://www.idpf.org/2007/opf"}
+
+    # Build manifest id → href map
+    manifest = {}
+    for item in opf.findall(".//opf:manifest/opf:item", opf_ns):
+        item_id = item.get("id", "")
+        href = item.get("href", "")
+        if item_id and href:
+            # Normalize to full zip path
+            full_href = os.path.normpath(os.path.join(opf_dir, href)) if opf_dir else href
+            manifest[item_id] = full_href
+
+    # Build spine order
+    spine_hrefs = []
+    for itemref in opf.findall(".//opf:spine/opf:itemref", opf_ns):
+        idref = itemref.get("idref", "")
+        if idref in manifest:
+            spine_hrefs.append(manifest[idref])
+
+    return spine_hrefs
+
+
+def _find_epub_nav(zf: zipfile.ZipFile) -> Optional[str]:
+    """Find the EPUB3 nav document path from the OPF manifest."""
+    container = ET.fromstring(zf.read("META-INF/container.xml"))
+    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+    rootfile = container.find(".//c:rootfile", ns)
+    if rootfile is None:
+        return None
+    opf_path = rootfile.get("full-path", "")
+    if not opf_path:
+        return None
+
+    opf_dir = os.path.dirname(opf_path)
+    opf = ET.fromstring(zf.read(opf_path))
+    opf_ns = {"opf": "http://www.idpf.org/2007/opf"}
+
+    for item in opf.findall(".//opf:manifest/opf:item", opf_ns):
+        props = item.get("properties", "")
+        if "nav" in props.split():
+            href = item.get("href", "")
+            if href:
+                return os.path.normpath(os.path.join(opf_dir, href)) if opf_dir else href
+    return None
+
+
+def _parse_nav_toc(zf: zipfile.ZipFile, nav_path: str) -> List[Tuple[str, str, int]]:
+    """
+    Parse an EPUB3 nav document to extract TOC entries.
+
+    Returns list of (title, href, level) tuples where href is the
+    full zip path (relative to EPUB root) and level is the nesting depth.
+    """
+    nav_dir = os.path.dirname(nav_path)
+    nav_content = zf.read(nav_path)
+
+    # Parse as XML, handling XHTML namespace
+    root = ET.fromstring(nav_content)
+    xhtml_ns = {"x": "http://www.w3.org/1999/xhtml", "epub": "http://www.idpf.org/2007/ops"}
+
+    # Find the nav element with epub:type="toc"
+    nav_elem = None
+    for nav in root.iter("{http://www.w3.org/1999/xhtml}nav"):
+        epub_type = nav.get("{http://www.idpf.org/2007/ops}type", "")
+        if epub_type == "toc":
+            nav_elem = nav
+            break
+
+    if nav_elem is None:
+        return []
+
+    entries = []
+
+    def walk_ol(ol_elem, depth):
+        for li in ol_elem.findall("x:li", xhtml_ns):
+            # Get the <a> element
+            a_elem = li.find("x:a", xhtml_ns)
+            if a_elem is not None:
+                title = "".join(a_elem.itertext()).strip()
+                href = a_elem.get("href", "")
+                if title and href:
+                    # Strip fragment, resolve relative to nav dir
+                    href_base = href.split("#")[0]
+                    if href_base:
+                        full_href = os.path.normpath(os.path.join(nav_dir, unquote(href_base)))
+                    else:
+                        full_href = ""
+                    entries.append((title, full_href, depth))
+
+            # Recurse into nested <ol>
+            nested_ol = li.find("x:ol", xhtml_ns)
+            if nested_ol is not None:
+                walk_ol(nested_ol, depth + 1)
+
+    top_ol = nav_elem.find("x:ol", xhtml_ns)
+    if top_ol is not None:
+        walk_ol(top_ol, 1)
+
+    return entries
+
+
+def build_chapter_map_from_epub(epub_path: str, max_level: int = 2) -> List[Tuple[str, str, int]]:
+    """
+    Build a chapter map from an EPUB file using spine indices.
+
+    Maps TOC entries to zero-padded spine index strings (e.g., "00055")
+    which correspond to the first field of annotationSortIndex.
+
+    Args:
+        epub_path: Path to the EPUB file.
+        max_level: Maximum heading depth to include.
+
+    Returns:
+        Sorted list of (title, spine_index_str, level) tuples.
+        Returns empty list if EPUB has no nav document or TOC.
+    """
+    try:
+        with zipfile.ZipFile(epub_path, "r") as zf:
+            # Get spine order
+            spine_hrefs = _parse_epub_spine(zf)
+            if not spine_hrefs:
+                return []
+
+            # Build href → spine index map
+            href_to_spine = {}
+            for idx, href in enumerate(spine_hrefs):
+                href_to_spine[href] = idx
+
+            # Find and parse nav document
+            nav_path = _find_epub_nav(zf)
+            if not nav_path:
+                return []
+
+            toc_entries = _parse_nav_toc(zf, nav_path)
+            if not toc_entries:
+                return []
+
+            # Map TOC entries to spine indices
+            entries = []
+            for title, href, level in toc_entries:
+                if level > max_level or not title.strip():
+                    continue
+                if href in href_to_spine:
+                    spine_idx = f"{href_to_spine[href]:05d}"
+                    entries.append((title.strip(), spine_idx, level))
+
+            # Deduplicate consecutive entries with same title
+            deduped = []
+            for title, spine_idx, level in entries:
+                if not deduped or deduped[-1][0] != title:
+                    deduped.append((title, spine_idx, level))
+
+            return deduped
+    except Exception:
+        return []
+
+
+def get_chapter_map_for_epub(epub_path: str, max_level: int = 2) -> List[Tuple[str, str, int]]:
+    """
+    Convenience: extract TOC and build chapter map from EPUB with spine indices.
+
+    Args:
+        epub_path: Path to the EPUB file.
+        max_level: Maximum heading depth to include.
+
+    Returns:
+        Sorted list of (title, spine_index_str, level) tuples, or empty list.
+    """
+    return build_chapter_map_from_epub(epub_path, max_level)
