@@ -30,6 +30,7 @@ zotero-collection-annots = "zotero_cli.collection_annots:main"
 zotero-export-attachments = "zotero_cli.export_attachments:main"
 zotero-list-libraries = "zotero_cli.list_libraries:main"
 zotero-find-items = "zotero_cli.find_items:main"
+zotero-chapter-map = "zotero_cli.pdf_toc:main"
 
 [build-system]
 requires = ["hatchling"]

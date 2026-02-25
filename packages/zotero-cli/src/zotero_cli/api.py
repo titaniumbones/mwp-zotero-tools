@@ -1519,39 +1519,49 @@ class ZoteroLocalAPI:
 
 def main():
     """Main function to demonstrate usage"""
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python get-annots.py <item_id> [--org|--markdown]")
-        print("Example: python get-annots.py ABCD1234")
-        print("Example: python get-annots.py ABCD1234 --org")
-        print("Example: python get-annots.py ABCD1234 --markdown")
+    args = sys.argv[1:]
+
+    if not args or '--help' in args or '-h' in args:
+        print("Usage: zotero-get-annots <item_id> [--org|--markdown] [--stdout]")
+        print("Example: zotero-get-annots ABCD1234")
+        print("Example: zotero-get-annots ABCD1234 --org")
+        print("Example: zotero-get-annots ABCD1234 --org --stdout")
         sys.exit(1)
-    
-    item_id = sys.argv[1]
-    format_type = sys.argv[2] if len(sys.argv) == 3 else None
-    org_mode = format_type == '--org'
-    markdown_mode = format_type == '--markdown'
-    
+
+    item_id = args[0]
+    flags = set(args[1:])
+    org_mode = '--org' in flags
+    markdown_mode = '--markdown' in flags
+    stdout_mode = '--stdout' in flags
+
+    # When --stdout, send status messages to stderr so stdout is clean
+    def status(msg):
+        if stdout_mode:
+            print(msg, file=sys.stderr)
+        else:
+            print(msg)
+
     # Initialize API client
     api = ZoteroLocalAPI()
-    
+
     # Get all annotations for the item
-    print(f"Retrieving annotations for item: {item_id}")
+    status(f"Retrieving annotations for item: {item_id}")
     result = api.get_all_annotations_for_item(item_id)
-    
+
     if "error" in result:
-        print(f"Error: {result['error']}")
+        print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)
-    
+
     total_annotations = sum(att['annotations_count'] for att in result['attachments'])
 
     # Handle formatted output
     if org_mode or markdown_mode:
         # Brief status line
-        print(f"Item: {result['item_title']} | {len(result['attachments'])} attachment(s) | {total_annotations} annotation(s)")
+        status(f"Item: {result['item_title']} | {len(result['attachments'])} attachment(s) | {total_annotations} annotation(s)")
 
         citation_key = api.get_citation_key_for_item(item_id)
         if citation_key:
-            print(f"Citation key: {citation_key}")
+            status(f"Citation key: {citation_key}")
 
         if org_mode:
             content = api.format_as_org_mode(result, citation_key)
@@ -1560,21 +1570,23 @@ def main():
             content = api.format_as_markdown(result, citation_key)
             file_ext = "md"
 
-        output_file = f"annotations_{item_id}.{file_ext}"
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        print(f"Saved to: {output_file}")
+        if stdout_mode:
+            print(content)
+        else:
+            output_file = f"annotations_{item_id}.{file_ext}"
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"Saved to: {output_file}")
     else:
         # JSON mode: print detailed summary for debugging
-        print(f"\nItem: {result['item_title']} ({result['item_type']})")
-        print(f"PDF Attachments: {len(result['attachments'])}")
-        print(f"Total Annotations: {total_annotations}")
+        status(f"\nItem: {result['item_title']} ({result['item_type']})")
+        status(f"PDF Attachments: {len(result['attachments'])}")
+        status(f"Total Annotations: {total_annotations}")
 
         for i, attachment in enumerate(result['attachments'], 1):
-            print(f"\n--- Attachment {i}: {attachment['attachment_title']} ---")
-            print(f"File: {attachment['filename']}")
-            print(f"Annotations: {attachment['annotations_count']}")
+            status(f"\n--- Attachment {i}: {attachment['attachment_title']} ---")
+            status(f"File: {attachment['filename']}")
+            status(f"Annotations: {attachment['annotations_count']}")
 
             for j, annotation in enumerate(attachment['annotations'], 1):
                 ann_data = annotation.get('data', {})
@@ -1582,17 +1594,19 @@ def main():
                 text = ann_data.get('annotationText', '')
                 comment = ann_data.get('annotationComment', '')
 
-                print(f"  {j}. Type: {ann_type}")
+                status(f"  {j}. Type: {ann_type}")
                 if text:
-                    print(f"     Text: {text[:100]}{'...' if len(text) > 100 else ''}")
+                    status(f"     Text: {text[:100]}{'...' if len(text) > 100 else ''}")
                 if comment:
-                    print(f"     Comment: {comment[:100]}{'...' if len(comment) > 100 else ''}")
+                    status(f"     Comment: {comment[:100]}{'...' if len(comment) > 100 else ''}")
 
-        output_file = f"annotations_{item_id}.json"
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-
-        print(f"\nFull results saved to: {output_file}")
+        if stdout_mode:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            output_file = f"annotations_{item_id}.json"
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            print(f"\nFull results saved to: {output_file}")
 
 
 if __name__ == "__main__":

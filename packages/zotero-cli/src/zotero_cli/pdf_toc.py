@@ -425,3 +425,24 @@ def get_chapter_map_for_epub(epub_path: str, max_level: int = 2) -> List[Tuple[s
         Sorted list of (title, spine_index_str, level) tuples, or empty list.
     """
     return build_chapter_map_from_epub(epub_path, max_level)
+
+
+def main():
+    """CLI entry point: print chapter map as JSON for a PDF or EPUB file."""
+    import json
+    import sys
+
+    if len(sys.argv) != 2:
+        print("Usage: zotero-chapter-map <file-path>", file=sys.stderr)
+        sys.exit(1)
+
+    file_path = sys.argv[1]
+    try:
+        if file_path.lower().endswith(".epub"):
+            chapter_map = get_chapter_map_for_epub(file_path)
+        else:
+            chapter_map = get_chapter_map_for_pdf(file_path)
+        # Output as JSON array of [title, page_label, level] arrays
+        print(json.dumps([list(entry) for entry in chapter_map], ensure_ascii=False))
+    except Exception:
+        print("[]")
