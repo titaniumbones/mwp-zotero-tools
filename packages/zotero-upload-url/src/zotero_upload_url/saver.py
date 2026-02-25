@@ -1,19 +1,24 @@
 """
-Zotero URL Saver - macOS AppleScript Edition
+Zotero URL Saver
 
-Opens URLs in your existing Firefox and saves to Zotero.
-Supports waiting for manual authentication (Duo push, etc).
+Opens URLs in browser and saves to Zotero via Zotero Connector.
+
+Two modes available:
+- Playwright (cross-platform, recommended): Uses browser automation
+- AppleScript (macOS only, legacy): Uses keyboard automation
 
 Usage:
-    zotero-save <url>                    # Interactive mode
+    zotero-save <url>                    # Playwright mode (default)
+    zotero-save --legacy <url>           # AppleScript mode (macOS)
     zotero-save --auto 10 <url>          # Auto-save after 10 seconds
-    zotero-save --no-open <placeholder>  # Save current tab
+    zotero-save --no-open <placeholder>  # Save current tab (legacy only)
 """
 
 import argparse
 import subprocess
 import sys
 import time
+from typing import Optional
 
 # Optional: for Zotero ping check
 try:
@@ -23,6 +28,55 @@ except ImportError:
     REQUESTS_AVAILABLE = False
 
 DEFAULT_ZOTERO_PORT = 23119
+
+
+def save_url_playwright(
+    url: str,
+    verify: bool = True,
+    profile: str = "default",
+    progress_callback: Optional[callable] = None,
+) -> bool:
+    """Save a URL to Zotero using Playwright browser automation.
+
+    Args:
+        url: URL to save
+        verify: Whether to verify the save via Zotero API
+        profile: Browser profile name
+        progress_callback: Optional callback for progress messages
+
+    Returns:
+        True if save succeeded, False otherwise
+    """
+    try:
+        from .playwright_harvester import PlaywrightHarvester, check_playwright_available
+        from .config import HarvestConfig
+
+        if not check_playwright_available():
+            raise ImportError("Playwright not installed")
+
+        config = HarvestConfig.load()
+        harvester = PlaywrightHarvester(config=config)
+
+        def _progress(msg: str) -> None:
+            if progress_callback:
+                progress_callback(msg)
+            else:
+                print(f"  {msg}")
+
+        try:
+            harvester.start(profile_name=profile)
+            result = harvester.harvest_url(
+                url,
+                verify=verify,
+                progress_callback=_progress,
+            )
+            return result.success
+        finally:
+            harvester.stop()
+
+    except ImportError as e:
+        print(f"Playwright not available: {e}", file=sys.stderr)
+        return False
 
 
 def check_zotero_running(port: int = DEFAULT_ZOTERO_PORT) -> bool:
@@ -110,23 +164,32 @@ def trigger_zotero_save(shortcut: str = "cmd+shift+z"):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Save URLs to Zotero via Firefox + Zotero Connector",
+        description="Save URLs to Zotero via browser + Zotero Connector",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s "https://arxiv.org/abs/2301.07041"
-      Open URL, wait for Enter, then save to Zotero
+      Open URL with Playwright, save to Zotero (recommended)
+
+  %(prog)s --legacy "https://arxiv.org/abs/2301.07041"
+      Use AppleScript method (macOS only)
 
   %(prog)s --auto 10 "https://arxiv.org/abs/2301.07041"
-      Open URL, wait 10 seconds, then save to Zotero
+      Legacy mode: wait 10 seconds, then save to Zotero
 
   %(prog)s --no-open placeholder
-      Save the current Firefox tab to Zotero
+      Legacy mode: save the current Firefox tab to Zotero
 
-Prerequisites:
-  - macOS (uses AppleScript)
-  - Firefox with Zotero Connector extension
-  - Zotero desktop app running
+Playwright mode (default):
+  - Cross-platform (macOS, Linux, Windows)
+  - Automatic page load detection
+  - Save verification via Zotero API
+  - Install: uv add playwright && playwright install chromium
+
+Legacy AppleScript mode (--legacy):
+  - macOS only
+  - Requires Firefox with Zotero Connector
+  - Manual timing for page loads
         """
     )
 
@@ -134,28 +197,50 @@ Prerequisites:
         "url",
         help="URL to save (or placeholder if using --no-open)"
     )
+
+    # Mode selection
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Use legacy AppleScript method (macOS only)"
+    )
+
+    # Playwright options
+    parser.add_argument(
+        "--profile",
+        default="default",
+        help="Browser profile name for Playwright mode (default: 'default')"
+    )
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip save verification in Playwright mode"
+    )
+
+    # Legacy options
     parser.add_argument(
         "--auto", "-a",
         type=int,
         metavar="SECONDS",
-        help="Auto-save after N seconds instead of waiting for Enter"
+        help="Legacy: auto-save after N seconds instead of waiting for Enter"
     )
     parser.add_argument(
         "--no-open", "-n",
         action="store_true",
-        help="Don't open URL (assume it's already open in Firefox)"
+        help="Legacy: don't open URL (assume it's already open in Firefox)"
     )
+    parser.add_argument(
+        "--shortcut", "-s",
+        default="option+cmd+s",
+        help="Zotero Connector keyboard shortcut (default: option+cmd+s for legacy, ctrl+shift+s for Playwright)"
+    )
+
+    # Common options
     parser.add_argument(
         "--port", "-p",
         type=int,
         default=DEFAULT_ZOTERO_PORT,
         help=f"Zotero connector port (default: {DEFAULT_ZOTERO_PORT})"
-    )
-    parser.add_argument(
-        "--shortcut", "-s",
-        default="option+cmd+s",
-        help="Zotero Connector keyboard shortcut (default: option+cmd+s). "
-             "Check Firefox Add-ons > gear icon > Manage Extension Shortcuts."
     )
     parser.add_argument(
         "--skip-check",
@@ -171,41 +256,67 @@ Prerequisites:
         print("(Use --skip-check to bypass this check, or --port to specify a different port)")
         sys.exit(1)
 
-    # Open URL in Firefox
-    if not args.no_open:
-        print(f"Opening: {args.url}")
+    if args.legacy:
+        # Legacy AppleScript mode (macOS only)
+        if not args.no_open:
+            print(f"Opening: {args.url}")
+            try:
+                open_url_in_firefox(args.url)
+            except RuntimeError as e:
+                print(f"Error opening URL: {e}")
+                sys.exit(1)
+
+        # Wait for auth/page load
+        if args.auto:
+            print(f"Waiting {args.auto} seconds for page to load...")
+            time.sleep(args.auto)
+        else:
+            try:
+                if sys.stdin.isatty():
+                    input("Press Enter when page is loaded and ready to save...")
+                else:
+                    print("Non-interactive mode: waiting 5 seconds...")
+                    time.sleep(5)
+            except EOFError:
+                print("No stdin available: waiting 5 seconds...")
+                time.sleep(5)
+
+        # Trigger Zotero save
+        print(f"Triggering Zotero save ({args.shortcut})...")
         try:
-            open_url_in_firefox(args.url)
+            trigger_zotero_save(args.shortcut)
         except RuntimeError as e:
-            print(f"Error opening URL: {e}")
+            print(f"Error triggering save: {e}")
             sys.exit(1)
 
-    # Wait for auth/page load
-    if args.auto:
-        print(f"Waiting {args.auto} seconds for page to load...")
-        time.sleep(args.auto)
+        print("Done! Check Zotero for the saved item.")
+
     else:
+        # Playwright mode (cross-platform)
         try:
-            if sys.stdin.isatty():
-                input("Press Enter when page is loaded and ready to save...")
-            else:
-                # Non-interactive mode, default to 5 second wait
-                print("Non-interactive mode: waiting 5 seconds...")
-                time.sleep(5)
-        except EOFError:
-            # stdin closed, default to 5 second wait
-            print("No stdin available: waiting 5 seconds...")
-            time.sleep(5)
+            from .playwright_harvester import check_playwright_available
+            if not check_playwright_available():
+                raise ImportError("Playwright not installed")
+        except ImportError:
+            print("Error: Playwright is not available.", file=sys.stderr)
+            print("Install with: uv add playwright && playwright install chromium", file=sys.stderr)
+            print("Or use --legacy for AppleScript method (macOS only).", file=sys.stderr)
+            sys.exit(1)
 
-    # Trigger Zotero save
-    print(f"Triggering Zotero save ({args.shortcut})...")
-    try:
-        trigger_zotero_save(args.shortcut)
-    except RuntimeError as e:
-        print(f"Error triggering save: {e}")
-        sys.exit(1)
+        print(f"Saving: {args.url}")
+        print("Starting browser...")
 
-    print("Done! Check Zotero for the saved item.")
+        success = save_url_playwright(
+            args.url,
+            verify=not args.no_verify,
+            profile=args.profile,
+        )
+
+        if success:
+            print("Done! Item saved to Zotero.")
+        else:
+            print("Save may have failed. Check Zotero for the item.")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
