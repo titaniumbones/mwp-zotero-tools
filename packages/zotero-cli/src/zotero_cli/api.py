@@ -15,16 +15,73 @@ from urllib.parse import urljoin
 
 class ZoteroLocalAPI:
     """Class to interact with Zotero's local API"""
-    
+
+    # Common UTF-8/Latin-1 mojibake replacements (class constant, built once)
+    _ENCODING_REPLACEMENTS = {
+        # Smart quotes and dashes
+        '\u00e2\u0080\u009c': '\u201c',  # left double quotation mark
+        '\u00e2\u0080\u009d': '\u201d',  # right double quotation mark
+        '\u00e2\u0080\u0098': '\u2018',  # left single quotation mark
+        '\u00e2\u0080\u0099': '\u2019',  # right single quotation mark
+        '\u00e2\u0080\u0094': '\u2014',  # em dash
+        '\u00e2\u0080\u0093': '\u2013',  # en dash
+        # Accented characters
+        '\u00c3\u00a1': '\u00e1', '\u00c3\u00a9': '\u00e9',
+        '\u00c3\u00ad': '\u00ed', '\u00c3\u00b3': '\u00f3',
+        '\u00c3\u00ba': '\u00fa', '\u00c3\u00b1': '\u00f1',
+        '\u00c3\u0080': '\u00c0', '\u00c3\u00a8': '\u00e8',
+        '\u00c3\u00ac': '\u00ec', '\u00c3\u00b2': '\u00f2',
+        '\u00c3\u00b9': '\u00f9', '\u00c3\u00a4': '\u00e4',
+        '\u00c3\u00ab': '\u00eb', '\u00c3\u00af': '\u00ef',
+        '\u00c3\u00b6': '\u00f6', '\u00c3\u00bc': '\u00fc',
+        '\u00c3\u00a7': '\u00e7',
+        # Symbols
+        '\u00e2\u0080\u00a2': '\u2022',  # bullet
+        '\u00e2\u0080\u00a6': '\u2026',  # ellipsis
+        '\u00c2\u00b0': '\u00b0',        # degree
+        '\u00c2\u00b1': '\u00b1',        # plus-minus
+        '\u00c2\u00b2': '\u00b2',        # superscript 2
+        '\u00c2\u00b3': '\u00b3',        # superscript 3
+        '\u00c2\u00bd': '\u00bd',        # 1/2
+        '\u00c2\u00bc': '\u00bc',        # 1/4
+        '\u00c2\u00be': '\u00be',        # 3/4
+        '\u00c2\u00a9': '\u00a9',        # copyright
+        '\u00c2\u00ae': '\u00ae',        # registered
+        '\u00c2\u00ab': '\u00ab',        # left guillemet
+        '\u00c2\u00bb': '\u00bb',        # right guillemet
+    }
+
+    # Word-specific corruption fixes (separated from generic encoding fixes)
+    _WORD_REPLACEMENTS = {
+        'pe\u00c2\u00baple': 'people',
+        'pe"\u00baple': 'people',
+        'pe\u00baple': 'people',
+        'house"hold': 'household',
+        'house"wives': 'housewives',
+        'single"family': 'single-family',
+        'well"publicized': 'well-publicized',
+        'car"ried': 'carried',
+        'in"dustrialization': 'industrialization',
+        'self"sufficient': 'self-sufficient',
+        'water"cooled': 'water-cooled',
+        'home"places': 'home places',
+        'work"places': 'work places',
+        'ex"pected': 'expected',
+        'contempo\u00e2raries': 'contemporaries',
+        'contempo"raries': 'contemporaries',
+        'contempo\u2014raries': 'contemporaries',
+    }
+
     def __init__(self, base_url: str = "http://localhost:23119"):
         """
         Initialize the Zotero Local API client
-        
+
         Args:
             base_url: Base URL for Zotero local API (default: http://localhost:23119)
         """
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
+        self._bbt_client = None
         
     def _make_request(self, endpoint: str) -> Optional[Dict[Any, Any]]:
         """
@@ -280,39 +337,48 @@ class ZoteroLocalAPI:
             return response
         return []
     
+    def _get_bbt_client(self):
+        """Lazily create and cache a BetterBibTexClient."""
+        if self._bbt_client is None:
+            from zotero_cli.bbt_client import BetterBibTexClient
+            self._bbt_client = BetterBibTexClient()
+        return self._bbt_client
+
     def get_all_annotations_for_item(self, item_id: str, library_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Get all annotations from all PDF attachments for a given item
-        
-        Args:
-            item_id: Zotero item ID
-            library_id: Library/group ID (if None, uses personal library)
-            
-        Returns:
-            Dictionary containing item info and all annotations organized by attachment
+        Get all annotations from all PDF attachments for a given item.
+
+        Tries Better BibTeX JSON-RPC first (richer annotation data).
+        Falls back to native Zotero local API if BBT is unavailable.
         """
-        # Get the main item
+        # Try BBT first
+        try:
+            bbt = self._get_bbt_client()
+            if bbt.is_available():
+                lib_id = int(library_id) if library_id else 1
+                return bbt.get_annotations_for_item(item_id, lib_id)
+        except Exception:
+            pass  # Fall through to native API
+
+        # Native API fallback
         item = self.get_item(item_id, library_id)
         if not item:
             return {"error": f"Item {item_id} not found"}
-        
-        # Get PDF attachments
+
         pdf_attachments = self.get_pdf_attachments(item_id, library_id)
-        
+
         result = {
             "item_id": item_id,
             "item_title": item.get('data', {}).get('title', 'Unknown'),
             "item_type": item.get('data', {}).get('itemType', 'Unknown'),
             "attachments": []
         }
-        
+
         for attachment in pdf_attachments:
             attachment_id = attachment['key']
             attachment_title = attachment.get('data', {}).get('title', 'Unknown')
-            
-            # Get annotations for this attachment
             annotations = self.get_attachment_annotations(attachment_id, library_id)
-            
+
             attachment_data = {
                 "attachment_id": attachment_id,
                 "attachment_title": attachment_title,
@@ -320,361 +386,411 @@ class ZoteroLocalAPI:
                 "annotations_count": len(annotations),
                 "annotations": annotations
             }
-            
+
             result["attachments"].append(attachment_data)
-        
+
         return result
     
     def normalize_text_encoding(self, text: str) -> str:
         """
         Fix common UTF-8/Latin-1 encoding issues in annotation text.
-        
-        Args:
-            text: Raw text that may have encoding issues
-            
-        Returns:
-            Text with corrected character encoding
+
+        Tries the standard double-encoding fix first (encode as latin-1,
+        decode as utf-8). Falls back to the replacement dictionary for
+        partial corruption that the standard fix can't handle.
         """
         if not text:
             return text
-            
-        # Common character replacements for UTF-8 decoded as Latin-1
-        replacements = {
-            # Smart quotes and dashes - corrected mappings
-            'â': '"',  # Corrupted left double quotation mark
-            'â': '"',  # Corrupted right double quotation mark  
-            'â': "'",  # Corrupted left single quotation mark
-            'â': "'",  # Corrupted right single quotation mark
-            'â': '—',  # Corrupted em dash
-            'â': '–',  # Corrupted en dash
-            
-            # Accented characters
-            'Ã¡': 'á',  # a with acute
-            'Ã©': 'é',  # e with acute
-            'Ã­': 'í',  # i with acute
-            'Ã³': 'ó',  # o with acute
-            'Ãº': 'ú',  # u with acute
-            'Ã±': 'ñ',  # n with tilde
-            'Ã': 'À',   # A with grave
-            'Ã¨': 'è',  # e with grave
-            'Ã¬': 'ì',  # i with grave
-            'Ã²': 'ò',  # o with grave
-            'Ã¹': 'ù',  # u with grave
-            'Ã¤': 'ä',  # a with diaeresis
-            'Ã«': 'ë',  # e with diaeresis
-            'Ã¯': 'ï',  # i with diaeresis
-            'Ã¶': 'ö',  # o with diaeresis
-            'Ã¼': 'ü',  # u with diaeresis
-            'Ã§': 'ç',  # c with cedilla
-            
-            # Other common issues
-            'â¢': '•',  # Bullet point
-            'â¦': '…',  # Horizontal ellipsis
-            'Â°': '°',  # Degree symbol
-            'Â±': '±',  # Plus-minus sign
-            'Â²': '²',  # Superscript 2
-            'Â³': '³',  # Superscript 3
-            'Â½': '½',  # Fraction 1/2
-            'Â¼': '¼',  # Fraction 1/4
-            'Â¾': '¾',  # Fraction 3/4
-            'Â©': '©',  # Copyright symbol
-            'Â®': '®',  # Registered trademark
-            'â¹': '‹',  # Single left-pointing angle quotation mark
-            'âº': '›',  # Single right-pointing angle quotation mark
-            'Â«': '«',  # Left-pointing double angle quotation mark
-            'Â»': '»',  # Right-pointing double angle quotation mark
-            
-            # Additional problematic sequences seen in the data
-            'peÂºple': 'people',
-            'pe"ºple': 'people',     # Alternative corruption pattern
-            'Ã©lite': 'élite',
-            'Ã±res': 'fires',
-            'dÃ©cor': 'décor',
-            'signiÃ±cant': 'significant',
-            'deÃ±ciencies': 'deficiencies',
-            'proÃ±tability': 'profitability',
-            'contempoâraries': 'contemporaries',
-            'contempo"raries': 'contemporaries',  # Alternative corruption pattern
-            'houseâhold': 'household',
-            'âassociationistsâ': '"associationists"',
-            'âplace"': '"place"',
-            'âpurchasing"': '"purchasing"',
-            'âmaintain-ing': '"maintain-ing',
-            'âdecentlyâ': '"decently"',
-            'âseparate spheres.\'â': '"separate spheres.\'"',
-            'heartâ is': 'heart" is',  # Specific corrupted quote pattern
-            'âdogs': '"dogs',  # Specific corrupted quote pattern
-            
-            # Additional corruption patterns found in the data
-            'as;9': 'as-',           # Common corruption pattern
-            'as;9 ': 'as- ',         # Common corruption pattern with space
-            'pa5-checks': 'paychecks',  # Specific corruption
-            'th%.': 'they.',       # Corruption with punctuation 
-            'th% ': 'they ',       # Corruption with space
-            'th%': 'they',         # Corruption without space
-            'undenl': 'under',       # Truncated/corrupted word
-            'peºple': 'people',      # Specific corruption with ordinal symbol
-            'contempo—raries': 'contemporaries',  # Specific corruption
-            'contempo"raries': 'contemporaries',  # Alternative corruption pattern
-            
-            # Smart quote corruption patterns (where " appears inappropriately)
-            'ex"pected': 'expected',    # Specific corruption in text
-            'house"hold': 'household',  # Specific corruption 
-            'house"wives': 'housewives', # Specific corruption
-            'single"family': 'single-family',  # Specific corruption
-            'well"publicized': 'well-publicized',  # Specific corruption
-            'ration-ali\'ze': 'rationalize',  # Specific corruption with apostrophe
-            'car"ried': 'carried',     # Specific corruption
-            'in"dustrialization': 'industrialization',  # Specific corruption
-            'self"sufficient': 'self-sufficient',  # Specific corruption
-            'water"cooled': 'water-cooled',  # Specific corruption
-            '"women\'s work"': '"women\'s work"',  # Keep proper quotes in quotes
-            'home"places': 'home places',  # Specific corruption - add space
-            'work"places': 'work places',  # Specific corruption - add space
-            'rules"to': 'rules—to',    # Em-dash corruption (rules" should be rules—)
-            'ourselves"generate': 'ourselves—generate',  # Em-dash corruption
-            'home"namely': 'home—namely',  # Em-dash corruption
-            
-            # UTF-8 corruption patterns with specific byte sequences
-            'rules"\x80\x94to': 'rules—to',    # Specific UTF-8 corrupted em-dash
-            'ourselves"\x80\x94generate': 'ourselves—generate',  # UTF-8 corrupted em-dash
-            'home"\x80\x94namely': 'home—namely',  # UTF-8 corrupted em-dash
-            
-            # Additional UTF-8 corruption patterns found in real data
-            'rules"‚"to': 'rules—to',    # Alternative corruption representation
-            'ourselves"‚"generate': 'ourselves—generate',  # Alternative corruption
-            'home"‚"namely': 'home—namely',  # Alternative corruption
-        }
-        
-        # Apply replacements
-        normalized_text = text
-        for wrong, correct in replacements.items():
-            normalized_text = normalized_text.replace(wrong, correct)
-            
-        return normalized_text
+
+        # Try the standard double-encoding fix first
+        try:
+            fixed = text.encode('latin-1').decode('utf-8')
+            # Only accept if it actually changed something and looks valid
+            if fixed != text:
+                return fixed
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            pass
+
+        # Fall back to dictionary-based replacement
+        normalized = text
+        for wrong, correct in self._ENCODING_REPLACEMENTS.items():
+            normalized = normalized.replace(wrong, correct)
+        for wrong, correct in self._WORD_REPLACEMENTS.items():
+            normalized = normalized.replace(wrong, correct)
+
+        return normalized
     
+    def _sort_annotations(self, annotations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Sort annotations by annotationSortIndex (ascending = reading order)."""
+        def sort_key(ann):
+            idx = ann.get('data', {}).get('annotationSortIndex', '')
+            if idx:
+                return idx
+            # Fall back to page label
+            page = ann.get('data', {}).get('annotationPageLabel', '0')
+            try:
+                return f"{int(page):05d}"
+            except (ValueError, TypeError):
+                return '99999'
+        return sorted(annotations, key=sort_key)
+
+    def _get_page_label(self, ann_data: Dict[str, Any]) -> str:
+        """Extract page label string from annotation data, for chapter lookup."""
+        page_label = ann_data.get('annotationPageLabel', '')
+        if page_label:
+            return page_label
+        # Fallback to pageIndex (0-indexed) converted to 1-indexed string
+        position = ann_data.get('annotationPosition', {})
+        if isinstance(position, str):
+            try:
+                import json as _json
+                position = _json.loads(position)
+            except (json.JSONDecodeError, TypeError):
+                position = {}
+        if isinstance(position, dict) and 'pageIndex' in position:
+            return str(position['pageIndex'] + 1)
+        return '0'
+
+    def _build_zotero_open_link(self, attachment_id: str, page_label: str,
+                                annotation_key: str, library_id: Optional[str] = None) -> str:
+        """Build a zotero://open-pdf link for an annotation."""
+        link = f"zotero://open-pdf/library/items/{attachment_id}"
+        params = []
+        if page_label:
+            params.append(f"page={page_label}")
+        if annotation_key:
+            params.append(f"annotation={annotation_key}")
+        if params:
+            link += "?" + "&".join(params)
+        return link
+
+    def _format_single_annotation_org(self, annotation: Dict[str, Any], attachment_id: str,
+                                       citation_key: Optional[str] = None,
+                                       library_id: Optional[str] = None) -> List[str]:
+        """Format a single annotation as org-mode lines."""
+        lines = []
+        ann_data = annotation.get('data', {})
+        ann_type = ann_data.get('annotationType', 'unknown')
+        ann_key = ann_data.get('key', '')
+        text = self.normalize_text_encoding(ann_data.get('annotationText', ''))
+        comment = self.normalize_text_encoding(ann_data.get('annotationComment', ''))
+        page_label = ann_data.get('annotationPageLabel', '')
+        color = ann_data.get('annotationColor', '')
+        tags = ann_data.get('tags', [])
+
+        # Page info for display
+        page_display = f"p. {page_label}" if page_label else "p. ?"
+
+        # Zotero open-pdf link
+        zotero_link = self._build_zotero_open_link(attachment_id, page_label, ann_key, library_id)
+
+        if ann_type == 'highlight' or ann_type == 'underline':
+            if text:
+                lines.append(f"[[{zotero_link}][{page_display}]]:")
+                lines.append("#+begin_quote")
+                lines.append(text)
+                lines.append("#+end_quote")
+                if comment:
+                    lines.append("")
+                    lines.append(comment)
+                if citation_key:
+                    page_info = page_label if page_label else "?"
+                    lines.append("")
+                    lines.append(f"[cite:@{citation_key}, p.{page_info}]")
+        elif ann_type == 'note':
+            lines.append(f"[[{zotero_link}][{page_display}]]:")
+            if comment:
+                lines.append("#+begin_comment")
+                lines.append(comment)
+                lines.append("#+end_comment")
+        elif ann_type == 'image':
+            lines.append(f"[[{zotero_link}][{page_display}]]:")
+            lines.append("#+begin_example")
+            lines.append(f"[Image annotation]")
+            lines.append("#+end_example")
+            if comment:
+                lines.append("")
+                lines.append(comment)
+
+        # Tags
+        if tags:
+            tag_names = [t.get('tag', '') for t in tags if t.get('tag')]
+            if tag_names:
+                tag_str = ":" + ":".join(tag_names) + ":"
+                lines.append(tag_str)
+
+        return lines
+
+    def _get_chapter_map_for_attachment(self, attachment: Dict[str, Any]) -> list:
+        """Try to get a chapter map for a PDF attachment."""
+        from zotero_cli.pdf_toc import get_chapter_map_for_pdf
+        pdf_path = attachment.get('path', '')
+        if not pdf_path:
+            return []
+        # Resolve storage path if needed
+        import os
+        if not os.path.isabs(pdf_path):
+            # Try Zotero storage path pattern
+            att_id = attachment.get('attachment_id', '')
+            zotero_dir = os.path.expanduser("~/Zotero/storage")
+            candidate = os.path.join(zotero_dir, att_id, pdf_path)
+            if os.path.exists(candidate):
+                pdf_path = candidate
+            else:
+                return []
+        if not os.path.exists(pdf_path):
+            return []
+        try:
+            return get_chapter_map_for_pdf(pdf_path)
+        except Exception:
+            return []
+
     def format_as_org_mode(self, annotations_data: Dict[str, Any], citation_key: Optional[str] = None) -> str:
         """
-        Format annotation data as org-mode text
-        
-        Args:
-            annotations_data: Result from get_all_annotations_for_item
-            citation_key: Optional BibTeX citation key for org-cite format
-            
-        Returns:
-            Formatted org-mode string
+        Format annotation data as org-mode text with per-annotation structure.
+
+        Each annotation gets its own #+begin_quote block with a zotero://open-pdf
+        link. Comments are interleaved with their annotations. When the PDF has a
+        table of contents, annotations are grouped under chapter headings.
         """
         if "error" in annotations_data:
             return f"# Error: {annotations_data['error']}\n"
-        
+
         org_content = []
-        
-        # Main header with item info
+
         item_title = self.normalize_text_encoding(annotations_data.get('item_title', 'Unknown'))
         item_type = annotations_data.get('item_type', 'Unknown')
         item_id = annotations_data.get('item_id', 'Unknown')
-        
+        # Use citation_key from data if not passed explicitly
+        if not citation_key:
+            citation_key = annotations_data.get('citation_key')
+
         org_content.append(f"* {item_title}")
-        org_content.append(f"  :PROPERTIES:")
+        org_content.append("  :PROPERTIES:")
         org_content.append(f"  :ITEM_TYPE: {item_type}")
         org_content.append(f"  :ZOTERO_KEY: {item_id}")
-        org_content.append(f"  :END:")
+        if citation_key:
+            org_content.append(f"  :CUSTOM_ID: {citation_key}")
+        org_content.append("  :END:")
         org_content.append("")
-        
-        # Process each PDF attachment
-        for attachment in annotations_data.get('attachments', []):
+
+        attachments = annotations_data.get('attachments', [])
+        multi_attachment = len(attachments) > 1
+
+        for attachment in attachments:
             attachment_title = self.normalize_text_encoding(attachment.get('attachment_title', 'Unknown PDF'))
             attachment_id = attachment.get('attachment_id', 'Unknown')
-            filename = attachment.get('filename', 'Unknown')
             annotations = attachment.get('annotations', [])
-            
-            # PDF header
-            org_content.append(f"** {attachment_title}")
-            org_content.append(f"   :PROPERTIES:")
-            org_content.append(f"   :ATTACHMENT_ID: {attachment_id}")
-            org_content.append(f"   :FILENAME: {filename}")
-            org_content.append(f"   :END:")
-            org_content.append("")
-            
+
+            if multi_attachment:
+                org_content.append(f"** {attachment_title}")
+                org_content.append("")
+                ann_heading = "***"
+                chapter_heading_base = "***"
+            else:
+                ann_heading = "**"
+                chapter_heading_base = "**"
+
             if not annotations:
-                org_content.append("   No annotations found.")
+                if multi_attachment:
+                    org_content.append("   No annotations found.")
+                else:
+                    org_content.append("No annotations found.")
                 org_content.append("")
                 continue
-            
-            # Collect all annotation texts first
-            annotation_texts = []
-            comments = []
-            
-            for i, annotation in enumerate(annotations, 1):
+
+            org_content.append(f"{ann_heading} Annotations")
+            org_content.append("")
+
+            # Sort annotations by sort index
+            sorted_anns = self._sort_annotations(annotations)
+
+            # Try to get chapter map for grouping
+            chapter_map = self._get_chapter_map_for_attachment(attachment)
+            current_chapters = {}  # level -> title
+
+            for annotation in sorted_anns:
                 ann_data = annotation.get('data', {})
-                ann_type = ann_data.get('annotationType', 'unknown')
-                text = self.normalize_text_encoding(ann_data.get('annotationText', ''))
-                comment = self.normalize_text_encoding(ann_data.get('annotationComment', ''))
-                
-                # Get page number if available
-                page_label = ann_data.get('annotationPageLabel', '')
-                position = ann_data.get('annotationPosition', {})
-                page_index = position.get('pageIndex', '') if isinstance(position, dict) else ''
-                
-                # Create Zotero link
-                zotero_link = f"zotero://select/library/items/{attachment_id}"
-                if page_label:
-                    zotero_link += f"?page={page_label}"
-                elif page_index:
-                    zotero_link += f"?page={page_index + 1}"  # Page index is 0-based
-                
-                # Collect annotation text with citation
-                if text:
-                    annotation_text = text
-                    
-                    # Add org-cite citation
-                    if citation_key:
-                        page_info = page_label if page_label else str(page_index + 1) if page_index else "?"
-                        annotation_text += f"\n\n[cite:@{citation_key}, p.{page_info}]"
-                    
-                    annotation_texts.append(annotation_text)
-                
-                # Collect annotation comment
-                if comment:
-                    comments.append(f"*Comment:* {comment}")
-            
-            # Add single quote block for all annotations from this PDF
-            if annotation_texts:
-                org_content.append(f"#+BEGIN_QUOTE")
-                org_content.append("\n\n".join(annotation_texts))
-                org_content.append(f"#+END_QUOTE")
+
+                # Chapter grouping
+                if chapter_map:
+                    page_label = self._get_page_label(ann_data)
+                    from zotero_cli.pdf_toc import get_chapters_for_page
+                    chapters = get_chapters_for_page(chapter_map, page_label)
+                    for title, level in chapters:
+                        if current_chapters.get(level) != title:
+                            current_chapters[level] = title
+                            # Reset deeper levels when a shallower heading changes
+                            deeper = [k for k in current_chapters if k > level]
+                            for k in deeper:
+                                del current_chapters[k]
+                            heading = chapter_heading_base + "*" * level
+                            org_content.append(f"{heading} {title}")
+                            org_content.append("")
+
+                ann_lines = self._format_single_annotation_org(
+                    annotation, attachment_id, citation_key)
+                org_content.extend(ann_lines)
                 org_content.append("")
-            
-            # Add comments after the quote block
-            if comments:
-                org_content.extend(comments)
-                org_content.append("")
-        
+
         return "\n".join(org_content)
     
+    def _format_single_annotation_md(self, annotation: Dict[str, Any], attachment_id: str,
+                                      citation_key: Optional[str] = None) -> List[str]:
+        """Format a single annotation as markdown lines."""
+        lines = []
+        ann_data = annotation.get('data', {})
+        ann_type = ann_data.get('annotationType', 'unknown')
+        ann_key = ann_data.get('key', '')
+        text = self.normalize_text_encoding(ann_data.get('annotationText', ''))
+        comment = self.normalize_text_encoding(ann_data.get('annotationComment', ''))
+        page_label = ann_data.get('annotationPageLabel', '')
+        tags = ann_data.get('tags', [])
+
+        page_display = f"p. {page_label}" if page_label else "p. ?"
+        zotero_link = self._build_zotero_open_link(attachment_id, page_label, ann_key)
+
+        if ann_type in ('highlight', 'underline'):
+            if text:
+                lines.append(f"[{page_display}]({zotero_link}):")
+                lines.append("")
+                lines.append(f"> {text}")
+                if comment:
+                    lines.append("")
+                    lines.append(comment)
+                if citation_key:
+                    page_info = page_label if page_label else "?"
+                    lines.append("")
+                    lines.append(f"[cite:@{citation_key}, p.{page_info}]")
+        elif ann_type == 'note':
+            lines.append(f"[{page_display}]({zotero_link}):")
+            if comment:
+                lines.append("")
+                lines.append(f"*{comment}*")
+        elif ann_type == 'image':
+            lines.append(f"[{page_display}]({zotero_link}):")
+            lines.append("")
+            lines.append("`[Image annotation]`")
+            if comment:
+                lines.append("")
+                lines.append(comment)
+
+        if tags:
+            tag_names = [t.get('tag', '') for t in tags if t.get('tag')]
+            if tag_names:
+                lines.append("")
+                lines.append("Tags: " + ", ".join(f"`{t}`" for t in tag_names))
+
+        return lines
+
     def format_as_markdown(self, annotations_data: Dict[str, Any], citation_key: Optional[str] = None) -> str:
         """
-        Format annotation data as markdown text
-        
-        Args:
-            annotations_data: Result from get_all_annotations_for_item
-            citation_key: Optional BibTeX citation key for citations
-            
-        Returns:
-            Formatted markdown string
+        Format annotation data as markdown with per-annotation structure.
+
+        Each annotation gets its own blockquote with a zotero link.
+        Comments are interleaved with their annotations.
         """
         if "error" in annotations_data:
             return f"# Error: {annotations_data['error']}\n"
-        
+
         md_content = []
-        
-        # Main header with item info
+
         item_title = self.normalize_text_encoding(annotations_data.get('item_title', 'Unknown'))
         item_type = annotations_data.get('item_type', 'Unknown')
         item_id = annotations_data.get('item_id', 'Unknown')
-        
+        if not citation_key:
+            citation_key = annotations_data.get('citation_key')
+
         md_content.append(f"# {item_title}")
         md_content.append("")
         md_content.append(f"**Item Type:** {item_type}")
         md_content.append(f"**Zotero Key:** {item_id}")
+        if citation_key:
+            md_content.append(f"**Citation Key:** {citation_key}")
         md_content.append("")
-        
-        # Process each PDF attachment
-        for attachment in annotations_data.get('attachments', []):
+
+        attachments = annotations_data.get('attachments', [])
+        multi_attachment = len(attachments) > 1
+
+        for attachment in attachments:
             attachment_title = self.normalize_text_encoding(attachment.get('attachment_title', 'Unknown PDF'))
             attachment_id = attachment.get('attachment_id', 'Unknown')
-            filename = attachment.get('filename', 'Unknown')
             annotations = attachment.get('annotations', [])
-            
-            # PDF header
-            md_content.append(f"## {attachment_title}")
-            md_content.append("")
-            md_content.append(f"**Attachment ID:** {attachment_id}")
-            md_content.append(f"**Filename:** {filename}")
-            md_content.append("")
-            
+
+            if multi_attachment:
+                md_content.append(f"## {attachment_title}")
+                md_content.append("")
+
             if not annotations:
                 md_content.append("No annotations found.")
                 md_content.append("")
                 continue
-            
-            # Collect all annotation texts first
-            annotation_texts = []
-            comments = []
-            
-            for i, annotation in enumerate(annotations, 1):
+
+            heading_prefix = "###" if multi_attachment else "##"
+            md_content.append(f"{heading_prefix} Annotations")
+            md_content.append("")
+
+            sorted_anns = self._sort_annotations(annotations)
+
+            chapter_map = self._get_chapter_map_for_attachment(attachment)
+            current_chapters = {}  # level -> title
+            chapter_heading_base = "##" + ("#" if multi_attachment else "")
+
+            for annotation in sorted_anns:
                 ann_data = annotation.get('data', {})
-                ann_type = ann_data.get('annotationType', 'unknown')
-                text = self.normalize_text_encoding(ann_data.get('annotationText', ''))
-                comment = self.normalize_text_encoding(ann_data.get('annotationComment', ''))
-                
-                # Get page number if available
-                page_label = ann_data.get('annotationPageLabel', '')
-                position = ann_data.get('annotationPosition', {})
-                page_index = position.get('pageIndex', '') if isinstance(position, dict) else ''
-                
-                # Create Zotero link
-                zotero_link = f"zotero://select/library/items/{attachment_id}"
-                if page_label:
-                    zotero_link += f"?page={page_label}"
-                elif page_index:
-                    zotero_link += f"?page={page_index + 1}"  # Page index is 0-based
-                
-                # Collect annotation text with citation
-                if text:
-                    annotation_text = text
-                    
-                    # Add citation
-                    if citation_key:
-                        page_info = page_label if page_label else str(page_index + 1) if page_index else "?"
-                        annotation_text += f"\n\n[cite:@{citation_key}, p.{page_info}]"
-                    
-                    annotation_texts.append(annotation_text)
-                
-                # Collect annotation comment
-                if comment:
-                    comments.append(f"**Comment:** {comment}")
-            
-            # Add single quote block for all annotations from this PDF
-            if annotation_texts:
-                md_content.append("::: .quote")
-                md_content.append("\n\n".join(annotation_texts))
-                md_content.append(":::")
+
+                if chapter_map:
+                    page_label = self._get_page_label(ann_data)
+                    from zotero_cli.pdf_toc import get_chapters_for_page
+                    chapters = get_chapters_for_page(chapter_map, page_label)
+                    for title, level in chapters:
+                        if current_chapters.get(level) != title:
+                            current_chapters[level] = title
+                            deeper = [k for k in current_chapters if k > level]
+                            for k in deeper:
+                                del current_chapters[k]
+                            heading = chapter_heading_base + "#" * level
+                            md_content.append(f"{heading} {title}")
+                            md_content.append("")
+
+                ann_lines = self._format_single_annotation_md(
+                    annotation, attachment_id, citation_key)
+                md_content.extend(ann_lines)
                 md_content.append("")
-            
-            # Add comments after the quote block
-            if comments:
-                md_content.extend(comments)
-                md_content.append("")
-        
+
         return "\n".join(md_content)
     
     def get_citation_key_for_item(self, item_id: str, library_id: Optional[str] = None) -> Optional[str]:
         """
-        Get the BibTeX citation key for a Zotero item by exporting it as BibTeX.
-        
-        Args:
-            item_id: Zotero item ID
-            library_id: Optional library ID for group libraries
-            
-        Returns:
-            BibTeX citation key or None if not found
+        Get the BibTeX citation key for a Zotero item.
+
+        Tries BBT JSON-RPC first (fast, direct). Falls back to exporting
+        BibTeX via native API and parsing the key with regex.
         """
+        # Try BBT first
         try:
-            # Export the item as BibTeX
+            bbt = self._get_bbt_client()
+            if bbt.is_available():
+                lib_id = int(library_id) if library_id else 1
+                key = bbt.get_citation_key(item_id, lib_id)
+                if key:
+                    return key
+        except Exception:
+            pass
+
+        # Fall back to native BibTeX export
+        try:
             bibtex_data = self.export_item_bibtex(item_id, library_id)
             if not bibtex_data:
                 return None
-            
-            # Parse the BibTeX to extract the citation key
+
             import re
-            # Match @type{citation_key, ...
             match = re.search(r'@\w+\s*{\s*([^,\s]+)\s*,', bibtex_data)
             if match:
                 return match.group(1)
-            
+
             return None
-            
+
         except Exception as e:
             print(f"Error getting citation key for item {item_id}: {e}")
             return None
@@ -1398,68 +1514,56 @@ def main():
         print(f"Error: {result['error']}")
         sys.exit(1)
     
-    # Print summary
-    print(f"\nItem: {result['item_title']} ({result['item_type']})")
-    print(f"PDF Attachments: {len(result['attachments'])}")
-    
     total_annotations = sum(att['annotations_count'] for att in result['attachments'])
-    print(f"Total Annotations: {total_annotations}")
-    
-    # Print detailed results
-    for i, attachment in enumerate(result['attachments'], 1):
-        print(f"\n--- Attachment {i}: {attachment['attachment_title']} ---")
-        print(f"File: {attachment['filename']}")
-        print(f"Annotations: {attachment['annotations_count']}")
-        
-        for j, annotation in enumerate(attachment['annotations'], 1):
-            ann_data = annotation.get('data', {})
-            ann_type = ann_data.get('annotationType', 'unknown')
-            text = ann_data.get('annotationText', '')
-            comment = ann_data.get('annotationComment', '')
-            
-            print(f"  {j}. Type: {ann_type}")
-            if text:
-                print(f"     Text: {text[:100]}{'...' if len(text) > 100 else ''}")
-            if comment:
-                print(f"     Comment: {comment[:100]}{'...' if len(comment) > 100 else ''}")
-    
+
     # Handle formatted output
     if org_mode or markdown_mode:
-        # Get citation key for citations
-        print("Getting citation key for citations...")
+        # Brief status line
+        print(f"Item: {result['item_title']} | {len(result['attachments'])} attachment(s) | {total_annotations} annotation(s)")
+
         citation_key = api.get_citation_key_for_item(item_id)
         if citation_key:
             print(f"Citation key: {citation_key}")
-        else:
-            print("Warning: Could not get citation key, links will be omitted")
-        
+
         if org_mode:
             content = api.format_as_org_mode(result, citation_key)
             file_ext = "org"
-            format_name = "ORG-MODE"
-        else:  # markdown_mode
+        else:
             content = api.format_as_markdown(result, citation_key)
             file_ext = "md"
-            format_name = "MARKDOWN"
-        
-        # Save to file
+
         output_file = f"annotations_{item_id}.{file_ext}"
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(content)
-        
-        print(f"\n{format_name} output saved to: {output_file}")
-        
-        # Also print to console
-        print("\n" + "="*50)
-        print(f"{format_name} OUTPUT:")
-        print("="*50)
-        print(content)
+
+        print(f"Saved to: {output_file}")
     else:
-        # Save to JSON file
+        # JSON mode: print detailed summary for debugging
+        print(f"\nItem: {result['item_title']} ({result['item_type']})")
+        print(f"PDF Attachments: {len(result['attachments'])}")
+        print(f"Total Annotations: {total_annotations}")
+
+        for i, attachment in enumerate(result['attachments'], 1):
+            print(f"\n--- Attachment {i}: {attachment['attachment_title']} ---")
+            print(f"File: {attachment['filename']}")
+            print(f"Annotations: {attachment['annotations_count']}")
+
+            for j, annotation in enumerate(attachment['annotations'], 1):
+                ann_data = annotation.get('data', {})
+                ann_type = ann_data.get('annotationType', 'unknown')
+                text = ann_data.get('annotationText', '')
+                comment = ann_data.get('annotationComment', '')
+
+                print(f"  {j}. Type: {ann_type}")
+                if text:
+                    print(f"     Text: {text[:100]}{'...' if len(text) > 100 else ''}")
+                if comment:
+                    print(f"     Comment: {comment[:100]}{'...' if len(comment) > 100 else ''}")
+
         output_file = f"annotations_{item_id}.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-        
+
         print(f"\nFull results saved to: {output_file}")
 
 
