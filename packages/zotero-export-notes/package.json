@@ -1,7 +1,7 @@
 {
   "name": "zotero-export-org-notes",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Export PDF annotations to org-mode files with org-pdftools links",
   "config": {
     "addonName": "Zotero Export Org Notes",

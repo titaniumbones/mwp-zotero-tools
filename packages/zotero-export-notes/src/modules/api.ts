@@ -240,61 +240,28 @@ interface ApiResponse {
 async function findItemByCitekey(citekey: string, libraryID?: number): Promise<Zotero.Item | null> {
   ztoolkit.log("Looking up citekey:", citekey, "libraryID:", libraryID);
 
-  // Try Better BibTeX JSON-RPC API
+  // Search the native Zotero citationKey field (BBT populates this in Zotero 7+)
   try {
-    ztoolkit.log("Trying BBT JSON-RPC API...");
-
-    // Get the server port from Zotero preferences
-    const port = (Zotero as unknown as { Prefs: { get: (key: string) => number } }).Prefs.get("httpServer.port") || 23119;
-    const url = `http://localhost:${port}/better-bibtex/json-rpc`;
-
-    // BBT item.search accepts optional library parameter
-    const params: (string | number)[] = [citekey];
+    ztoolkit.log("Searching native citationKey field...");
+    const s = new (Zotero as unknown as { Search: new () => ZoteroSearch }).Search();
+    s.addCondition("citationKey", "is", citekey);
     if (libraryID !== undefined) {
-      params.push(libraryID);
+      s.addCondition("libraryID", "is", String(libraryID));
     }
+    const ids = await s.search();
+    ztoolkit.log("citationKey search returned ids:", ids);
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "item.search",
-        params,
-        id: 1,
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json() as { result?: Array<{ id?: string; itemKey?: string; libraryID?: number }> };
-      ztoolkit.log("BBT JSON-RPC response:", data);
-
-      if (data.result && data.result.length > 0) {
-        const bbtItem = data.result[0];
-
-        // Extract item key from the id URL (format: "http://zotero.org/users/XX/items/ITEMKEY")
-        let itemKey = bbtItem.itemKey;
-        if (!itemKey && bbtItem.id) {
-          const match = bbtItem.id.match(/\/items\/([A-Z0-9]+)$/);
-          if (match) {
-            itemKey = match[1];
-          }
-        }
-
-        if (itemKey) {
-          ztoolkit.log("Found item key:", itemKey);
-          const itemLibraryID = libraryID ?? bbtItem.libraryID ?? Zotero.Libraries.userLibraryID;
-          const item = await (Zotero as unknown as { Items: { getByLibraryAndKeyAsync: (lib: number, key: string) => Promise<Zotero.Item | null> } })
-            .Items.getByLibraryAndKeyAsync(itemLibraryID, itemKey);
-          if (item) {
-            ztoolkit.log("Found item via BBT:", item.getField("title"));
-            return item;
-          }
+    if (ids && ids.length > 0) {
+      const items = await (Zotero as unknown as { Items: { getAsync: (ids: number[]) => Promise<Zotero.Item[]> } }).Items.getAsync(ids);
+      for (const item of items) {
+        if (item.isRegularItem()) {
+          ztoolkit.log("Found item via citationKey field:", item.getField("title"));
+          return item;
         }
       }
     }
   } catch (e) {
-    ztoolkit.log("BBT JSON-RPC lookup failed:", e);
+    ztoolkit.log("citationKey field search failed:", e);
   }
 
   // Fall back to searching Extra field for "Citation Key: xxx"
@@ -600,38 +567,12 @@ function PickerEndpoint() {
         mainWindow.focus();
       }
 
-      // Use BBT's item.citationkey("selected") to get citekey of selected items
-      const port = (Zotero as unknown as { Prefs: { get: (key: string) => number } }).Prefs.get("httpServer.port") || 23119;
-      const response = await fetch(`http://localhost:${port}/better-bibtex/json-rpc`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "item.citationkey",
-          params: ["selected"],
-          id: 1,
-        }),
-      });
+      // Read the selected item's citationKey directly from Zotero's native field
+      // (Zotero 7+ exposes citationKey as a field; BBT populates it).
+      const zPane = (Zotero as unknown as { getActiveZoteroPane: () => { getSelectedItems: () => Zotero.Item[] } | null }).getActiveZoteroPane();
+      const items = zPane?.getSelectedItems?.() ?? [];
 
-      if (!response.ok) {
-        sendResponseCallback(500, "application/json", JSON.stringify({
-          success: false,
-          error: "Failed to query Better BibTeX",
-        }));
-        return;
-      }
-
-      const data = await response.json() as { result?: Record<string, string | null>; error?: { message: string } };
-
-      if (data.error) {
-        sendResponseCallback(500, "application/json", JSON.stringify({
-          success: false,
-          error: `BBT error: ${data.error.message}`,
-        }));
-        return;
-      }
-
-      if (!data.result || Object.keys(data.result).length === 0) {
+      if (items.length === 0) {
         sendResponseCallback(200, "application/json", JSON.stringify({
           success: false,
           error: "No item selected in Zotero. Please select an item first.",
@@ -639,9 +580,8 @@ function PickerEndpoint() {
         return;
       }
 
-      // Get the first citekey from the result
-      const entries = Object.entries(data.result);
-      const [itemKey, citekey] = entries[0];
+      const item = items[0];
+      const citekey = item.getField("citationKey") as string | undefined;
 
       if (!citekey) {
         sendResponseCallback(200, "application/json", JSON.stringify({
@@ -654,7 +594,7 @@ function PickerEndpoint() {
       sendResponseCallback(200, "application/json", JSON.stringify({
         success: true,
         citekey,
-        itemKey,
+        itemKey: item.key,
       }));
     } catch (e) {
       sendResponseCallback(500, "application/json", JSON.stringify({

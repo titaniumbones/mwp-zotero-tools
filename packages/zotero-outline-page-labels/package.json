@@ -1,0 +1,42 @@
+{
+  "name": "zotero-outline-page-labels",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Add page labels to the PDF outline/TOC sidebar in Zotero's PDF reader",
+  "config": {
+    "addonName": "Zotero Outline Page Labels",
+    "addonID": "zotero-outline-page-labels@example.com",
+    "addonRef": "zoterooutlinepagelabels",
+    "addonInstance": "ZoteroOutlinePageLabels",
+    "prefsPrefix": "extensions.zotero.outlinepagelabels"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pricemat/mwp-zotero-tools.git"
+  },
+  "author": "Matt Price",
+  "homepage": "https://github.com/pricemat/mwp-zotero-tools#readme",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "zotero-plugin serve",
+    "build": "zotero-plugin build && tsc --noEmit",
+    "lint:check": "prettier --check . && eslint .",
+    "lint:fix": "prettier --write . && eslint . --fix"
+  },
+  "dependencies": {
+    "zotero-plugin-toolkit": "^5.1.0-beta.13"
+  },
+  "devDependencies": {
+    "@zotero-plugin/eslint-config": "^0.6.7",
+    "eslint": "^9.39.2",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "zotero-plugin-scaffold": "^0.8.2",
+    "zotero-types": "^4.1.0-beta.4"
+  },
+  "prettier": {
+    "printWidth": 80,
+    "tabWidth": 2,
+    "endOfLine": "lf"
+  }
+}
